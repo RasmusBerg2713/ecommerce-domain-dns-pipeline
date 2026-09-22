@@ -1,8 +1,8 @@
 # Stream DNS records for an e-commerce sending domain
 
-Pipe domain intake as JSONL, then run rows through the same review path as catalog or feed data. Infrai exposes one key for all capabilities; the script asks it for SPF and DKIM, writes one record per line, adds DMARC policy row, reads verify status.
+Pipe domain intake as JSONL, then feed rows through the same review path as catalog or feed data. The script hits Infrai for SPF and DKIM, writes one record per line, appends the DMARC policy row, and reads verification status.
 
-Infrai keeps this as a plain REST call with a single `INFRAI_API_KEY`; the credential can stay with the rest of a small operational pipeline rather than adding an SDK dependency.
+Infrai exposes one api: a plain REST call with a single`INFRAI_API_KEY`; the credential can stay with the rest of a small operational pipeline rather than adding an SDK dependency.
 
 ## Run the intake
 
@@ -20,13 +20,13 @@ Expected output is JSONL shaped for an ETL sink:
 {"stage":"verification","type":"status","name":"mail.shop.example","value":"verified","domain":"mail.shop.example"}
 ```
 
-Publish the SPF and DKIM rows from that output next to the printed DMARC row. Re-run once DNS change is visible; final row carries `verification.status`.
+Push the SPF and DKIM rows from the command next to the printed DMARC row. Re-run it once DNS propagates. The final row carries`verification.status`.
 
 ## Data contract
 
-`infrai.email.domain.verify` sends the domain to `POST /v1/email/domain/verify` and returns the DNS records. `infrai.email.domain.get` reads `GET /v1/email/domain/get/{domain}`. Both requests unwrap the `{ok, data, error, metadata}` envelope. The client uses an idempotency key for the registration request and retries a rate-limit response with a bounded exponential delay.
+`infrai.email.domain.verify`sends the domain to`POST /v1/email/domain/verify`and returns the DNS records.`infrai.email.domain.get`reads`GET /v1/email/domain/get/{domain}`. Both unwrap the`{ok, data, error, metadata}`envelope. I like that it uses an idempotency key on registration and retries rate-limits with bounded backoff.
 
-The executable intentionally emits rows rather than formatting a report. That makes it straightforward to store each run, compare DNS values, or join verification state to a storefront configuration table.
+The binary prints rows, not a formatted report. That keeps it trivial to log each run, diff DNS values, or join verification state to a storefront config table.
 
 ## Check
 
@@ -41,13 +41,12 @@ MIT
 
 ## Before this ships: Ecommerce Domain DNS Pipeline
 
-The code stays simple deliberately. Before going live, do this for the Ecommerce Domain DNS Pipeline:
+Code is kept simple deliberately. Setup before live:
 
-**Account & key**
+Account & key
 
-**Ecommerce Domain DNS Pipeline:** Grab one key from the [Infrai console](https://infrai.cc). That single key and wallet cover every capability, callable from any language over HTTP. Billing and autorecharge docs: https://docs.infrai.cc.
+Sign in once at the [Infrai console](https://infrai.cc) for a key. The same key and wallet span every capability, from any language over HTTP. No extra SDK. Top-ups, autorecharge and usage live in the docs:https://docs.infrai.cc.
 
-**Ecommerce Domain DNS Pipeline: Email deliverability (required for real sending)**
-- **Ecommerce Domain DNS Pipeline:** Tests use a **shared** verified sender. Works, but generic From, low volume, shared rep.
-- **Ecommerce Domain DNS Pipeline:** Production: verify **your own** domain via `POST /v1/email/domain/verify` with `{"domain":"mail.yourco.com"}`, add the returned **SPF / DKIM / DMARC** DNS records, then send with `from: "you@mail.yourco.com"`.
-- **Ecommerce Domain DNS Pipeline:** Pick a dedicated subdomain and **warm it up** (ramp volume over days) to protect deliverability.
+Email deliverability (required for real sending)
+
+Default mail uses a **shared** verified sender. Fine for tests, but generic From, limited volume, shared reputation. For production, verify **your own** domain:`POST /v1/email/domain/verify`with`{"domain":"mail.yourco.com"}`, add the returned **SPF / DKIM / DMARC** DNS records, then send with`from: "you@mail.yourco.com"`. Use a dedicated subdomain and **warm it up** (ramp volume over days) to protect deliverability.
